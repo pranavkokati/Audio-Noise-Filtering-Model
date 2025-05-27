@@ -1,7 +1,5 @@
 # Audio Noise Filtering Model
 
-## Project Description
-
 AudioSep-UNet is a deep learning project that implements a U-Net architecture for the task of audio source separation, specifically targeting the isolation of clean speech from noisy mixtures. The model operates on Mel-spectrogram representations of audio signals, learning to estimate a time-frequency mask that, when applied to the noisy mixture's spectrogram, suppresses the unwanted background noise while preserving the desired speech component. The project leverages the MS-SNSD dataset for training and evaluation, providing a robust framework for developing and assessing speech enhancement techniques.
 
 ## Features
