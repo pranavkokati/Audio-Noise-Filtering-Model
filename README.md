@@ -1,5 +1,3 @@
-# Audio-Denoising-Model
-
 # Audio Source Separation using U-Net
 
 This project implements an audio source separation model using a U-Net architecture. It trains on a dataset of noisy speech to learn to separate clean speech from background noise. The model is trained on Mel-spectrogram representations of the audio signals.
