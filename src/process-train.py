@@ -137,3 +137,105 @@ def valid_gen():
         source_mask = tf.convert_to_tensor(output_masks, dtype=tf.float32)
 
         yield input_data, source_mask
+
+# U-Net Model
+def build_unet(input_shape):
+    inputs = layers.Input(shape=input_shape)
+    conv1 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+    pool1 = layers.MaxPooling2D((2, 2))(conv1)
+    conv2 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(pool1)
+    pool2 = layers.MaxPooling2D((2, 2))(conv2)
+    conv3 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(pool2)
+    pool3 = layers.MaxPooling2D((2, 2))(conv3)
+    bottleneck = layers.Conv2D(256, (3, 3), activation='relu', padding='same')(pool3)
+    up4 = layers.UpSampling2D((2, 2))(bottleneck)
+    concat4 = layers.Concatenate()([up4, conv3])
+    conv4 = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(concat4)
+    up5 = layers.UpSampling2D((2, 2))(conv4)
+    concat5 = layers.Concatenate()([up5, conv2])
+    conv5 = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(concat5)
+    up6 = layers.UpSampling2D((2, 2))(conv5)
+    concat6 = layers.Concatenate()([up6, conv1])
+    conv6 = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(concat6)
+    outputs = layers.Conv2D(1, (1, 1), activation='sigmoid', padding='same')(conv6)
+    return models.Model(inputs, outputs)
+
+if __name__ == "__main__":
+    # Fix path syntax
+    mix_path = mix_path + "/"
+    sim_path = sim_path + "/"
+
+    # Set max_frames
+    max_frames = 160  # Matches 5s training and truncated validation
+    input_shape = (n_mels, max_frames, 1)
+    batch_size = 16
+
+    # Output signature
+    output_signature = (
+        tf.TensorSpec(shape=(n_mels, max_frames), dtype=tf.float32),  # Fixed size
+        tf.TensorSpec(shape=(n_mels, max_frames, 1), dtype=tf.float32)
+    )
+
+    # Data pipeline
+    ds_train = tf.data.Dataset.from_generator(
+        train_gen,
+        output_signature=output_signature
+    )
+    ds_train = ds_train.cache()
+    ds_train = ds_train.shuffle(buffer_size=1024)
+    ds_train = ds_train.batch(batch_size)  # No padding needed, fixed size
+    ds_train = ds_train.prefetch(tf.data.AUTOTUNE)
+    ds_train = ds_train.repeat(1)
+
+    ds_valid = tf.data.Dataset.from_generator(
+        valid_gen,
+        output_signature=output_signature
+    )
+    ds_valid = ds_valid.batch(batch_size)  # No padding needed, fixed size
+    ds_valid = ds_valid.prefetch(tf.data.AUTOTUNE)
+    ds_valid = ds_valid.repeat(1)
+
+    # Ensure checkpoint directory exists
+    os.makedirs('model_checkpoints', exist_ok=True)
+
+    # Clear previous models
+    tf.keras.backend.clear_session()
+
+    # Initialize model
+    model_unet = build_unet(input_shape)
+    model_unet.summary()
+
+    # Training configuration
+    loss_fn = tf.keras.losses.MeanSquaredError()
+    initial_learning_rate = 0.003
+
+    def lr_schedule(epoch, lr):
+        if epoch % 10 == 0 and epoch != 0:
+            return lr * 0.5
+        return lr
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
+    callback_lr = tf.keras.callbacks.LearningRateScheduler(lr_schedule)
+    checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+        filepath='model_checkpoints/model_unet_epoch_{epoch:02d}.weights.h5',
+        save_weights_only=True,
+        save_best_only=True,
+        save_freq='epoch'
+    )
+
+    model_unet.compile(optimizer=optimizer, loss=loss_fn, metrics=['mae'])
+
+    # Train
+    history = model_unet.fit(ds_train, epochs=150, callbacks=[callback_lr, checkpoint_callback], validation_data=ds_valid)
+
+    # Save final model
+    model_unet.save('model_unet_final.keras')
+
+    # Plot training history
+    plt.plot(history.history['loss'], label='Learning loss f-value')
+    plt.plot(history.history['val_loss'], label='Validation loss f-statement')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss F-account')
+    plt.title('Change in the training and validation loss f-ratio over epochs')
+    plt.legend()
+    plt.show()
